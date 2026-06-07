@@ -159,8 +159,20 @@ export const handleCallback = async (req, res) => {
 
 export const createEvent = async (req, res) => {
   try {
-    const { methodApiKey, userRecordId, summary, start, end, attendees } = req.body;
+    const {
+      methodApiKey,
+      userRecordId,
+      summary,
+      location,
+      description,
+      start,
+      end,
+      attendees,
+      reminders,
+      conferenceData
+    } = req.body;
 
+    // Validate required fields
     if (!methodApiKey || !userRecordId) {
       return res.status(400).json({
         success: false,
@@ -177,7 +189,7 @@ export const createEvent = async (req, res) => {
       });
     }
 
-    // Get tokens from Method
+    // Get tokens from Method user record
     const { accessToken, refreshToken, expiry } = await getTokensFromMethod(
       methodApiKey,
       userRecordId
@@ -197,7 +209,6 @@ export const createEvent = async (req, res) => {
 
     if (isExpired) {
       console.log("🔄 Access token expired, refreshing...");
-
       const refreshRes = await axios.post(
         "https://oauth2.googleapis.com/token",
         new URLSearchParams({
@@ -209,12 +220,10 @@ export const createEvent = async (req, res) => {
       );
 
       currentAccessToken = refreshRes.data.access_token;
-
       const newExpiry = new Date(
         Date.now() + refreshRes.data.expires_in * 1000
       ).toISOString();
 
-      // Save refreshed tokens
       await saveTokensToMethod(methodApiKey, userRecordId, {
         refresh_token: refreshToken,
         access_token: currentAccessToken,
@@ -224,39 +233,48 @@ export const createEvent = async (req, res) => {
       console.log("✅ Access token refreshed.");
     }
 
-    // Create Google Calendar event
+    // Build event payload using what Method sends
+    const eventBody = {
+      summary,
+      location,
+      description,
+      start,        // already { dateTime, timeZone }
+      end,          // already { dateTime, timeZone }
+      attendees: attendees ?? [],
+      reminders: reminders ?? { useDefault: true },
+      conferenceData: conferenceData ?? {
+        createRequest: { requestId: "meet-" + Date.now() }
+      }
+    };
+
+    // Create Google Calendar event with Meet link
     const eventRes = await axios.post(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
-      {
-        summary,
-        start: { dateTime: start },
-        end: { dateTime: end },
-        attendees: attendees ?? [],
-        conferenceData: {
-          createRequest: { requestId: "meet-" + Date.now() }
-        }
-      },
+      eventBody,
       {
         headers: { Authorization: `Bearer ${currentAccessToken}` }
       }
     );
 
     const event = eventRes.data;
-
-    const meetLink = event.conferenceData?.entryPoints?.[0]?.uri ?? null;
+    const meetLink  = event.conferenceData?.entryPoints?.[0]?.uri ?? null;
+    const htmlLink  = event.htmlLink ?? null;
+    const eventId   = event.id ?? null;
+    const startTime = event.start?.dateTime ?? null;
+    const endTime   = event.end?.dateTime ?? null;
 
     console.log("✅ Event created:", meetLink);
 
     res.status(200).json({
-      success: true,
-      status: "ok",
-      message: "Meeting created successfully.",
+      success:   true,
+      status:    "ok",
+      message:   "Meeting created successfully.",
       meetLink,
-      htmlLink: event.htmlLink ?? null,
-      eventId: event.id ?? null,
-      summary: event.summary,
-      startTime: event.start?.dateTime ?? null,
-      endTime: event.end?.dateTime ?? null,
+      htmlLink,
+      eventId,
+      summary:   event.summary,
+      startTime,
+      endTime,
       attendees: event.attendees ?? []
     });
 
@@ -270,3 +288,4 @@ export const createEvent = async (req, res) => {
     });
   }
 };
+
