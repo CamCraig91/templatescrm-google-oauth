@@ -4,9 +4,6 @@ import { saveTokensToMethod, getTokensFromMethod } from "./db.js";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PART 1 — USER AUTHENTICATION (One time setup per user)
-// User connects their Google Calendar to the system.
-// Method calls /initiate-auth via workflow, gets back authUrl, redirects user.
-// Google redirects back to /oauth/callback, tokens saved to Method user record.
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ─── 1a. Generate Auth URL ────────────────────────────────────────────────────
@@ -19,7 +16,7 @@ export const initiateAuth = (req, res) => {
   if (!accountId || !userRecordId || !methodApiKey) {
     return res.status(400).json({
       success: false,
-      status:  "error",
+      status: "error",
       message: "Missing required fields: accountId, userRecordId, or methodApiKey."
     });
   }
@@ -32,12 +29,12 @@ export const initiateAuth = (req, res) => {
     const authUrl =
       "https://accounts.google.com/o/oauth2/v2/auth?" +
       new URLSearchParams({
-        client_id:     GOOGLE_CLIENT_ID,
-        redirect_uri:  REDIRECT_URI,
+        client_id: GOOGLE_CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
         response_type: "code",
-        scope:         "https://www.googleapis.com/auth/calendar.events",
-        access_type:   "offline",
-        prompt:        "consent select_account",
+        scope: "https://www.googleapis.com/auth/calendar.events",
+        access_type: "offline",
+        prompt: "consent select_account",
         state
       });
 
@@ -45,7 +42,7 @@ export const initiateAuth = (req, res) => {
 
     res.status(200).json({
       success: true,
-      status:  "ok",
+      status: "ok",
       message: "Authorization URL generated successfully.",
       authUrl
     });
@@ -54,15 +51,13 @@ export const initiateAuth = (req, res) => {
     console.error("❌ initiateAuth error:", err.message);
     res.status(500).json({
       success: false,
-      status:  "error",
+      status: "error",
       message: "Server error generating authorization URL."
     });
   }
 };
 
 // ─── 1b. Local Testing Only ───────────────────────────────────────────────────
-// Use: http://localhost:4000/oauth/start?accountId=X&userRecordId=Y&methodApiKey=Z
-// NOT used in production — Method uses /initiate-auth instead
 
 export const startAuth = (req, res) => {
   const { accountId, userRecordId, methodApiKey } = req.query;
@@ -78,12 +73,12 @@ export const startAuth = (req, res) => {
   const url =
     "https://accounts.google.com/o/oauth2/v2/auth?" +
     new URLSearchParams({
-      client_id:     GOOGLE_CLIENT_ID,
-      redirect_uri:  REDIRECT_URI,
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
       response_type: "code",
-      scope:         "https://www.googleapis.com/auth/calendar.events",
-      access_type:   "offline",
-      prompt:        "consent select_account",
+      scope: "https://www.googleapis.com/auth/calendar.events",
+      access_type: "offline",
+      prompt: "consent select_account",
       state
     });
 
@@ -91,10 +86,7 @@ export const startAuth = (req, res) => {
   res.redirect(url);
 };
 
-// ─── 1c. Google Callback ──────────────────────────────────────────────────────
-// Google redirects here after user authenticates.
-// Exchanges code for tokens and saves them to the user's Method record.
-// This is the ONLY place we write to Method during auth.
+// ─── 1c. Google Callback — Save Tokens to Method ──────────────────────────────
 
 export const handleCallback = async (req, res) => {
   try {
@@ -123,18 +115,23 @@ export const handleCallback = async (req, res) => {
       "https://oauth2.googleapis.com/token",
       new URLSearchParams({
         code,
-        client_id:     GOOGLE_CLIENT_ID,
+        client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri:  REDIRECT_URI,
-        grant_type:    "authorization_code"
+        redirect_uri: REDIRECT_URI,
+        grant_type: "authorization_code"
       })
     );
 
-    const tokens = { ...tokenRes.data, code };
+    const tokens = tokenRes.data;
+
     console.log("✅ Tokens received. Has refresh token:", !!tokens.refresh_token);
 
     // Save tokens to Method user record
-    await saveTokensToMethod(methodApiKey, userRecordId, tokens);
+    await saveTokensToMethod(methodApiKey, userRecordId, {
+      refresh_token: tokens.refresh_token,
+      access_token: tokens.access_token,
+      expires_in: tokens.expires_in
+    });
 
     res.send(`
       <html><body style="font-family:sans-serif;text-align:center;padding:60px">
@@ -157,29 +154,17 @@ export const handleCallback = async (req, res) => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PART 2 — MEETING CREATION (Separate from auth, triggered independently)
-// Can be triggered by:
-//   - A contact booking an appointment (via booking page)
-//   - A user sending a meeting link manually from Method
-// Method calls /create-event via workflow with meeting details.
-// Returns full event data — Method handles any field updates from there.
+// PART 2 — MEETING CREATION
 // ═════════════════════════════════════════════════════════════════════════════
-
-// ─── 2a. Create Google Meet Event ────────────────────────────────────────────
-// Called by Method workflow via POST /create-event
-// Fetches user's tokens from Method, refreshes if expired, creates event.
-// Returns all event data in response — no field writes back to Method.
-// Method decides what to do with the response (save fields, send email, etc.)
 
 export const createEvent = async (req, res) => {
   try {
     const { methodApiKey, userRecordId, summary, start, end, attendees } = req.body;
 
-    // Validate required fields
     if (!methodApiKey || !userRecordId) {
       return res.status(400).json({
         success: false,
-        status:  "error",
+        status: "error",
         message: "Missing required fields: methodApiKey or userRecordId."
       });
     }
@@ -187,12 +172,12 @@ export const createEvent = async (req, res) => {
     if (!summary || !start || !end) {
       return res.status(400).json({
         success: false,
-        status:  "error",
+        status: "error",
         message: "Missing required fields: summary, start, or end."
       });
     }
 
-    // Get tokens from Method user record
+    // Get tokens from Method
     const { accessToken, refreshToken, expiry } = await getTokensFromMethod(
       methodApiKey,
       userRecordId
@@ -201,7 +186,7 @@ export const createEvent = async (req, res) => {
     if (!refreshToken) {
       return res.status(400).json({
         success: false,
-        status:  "error",
+        status: "error",
         message: "No Google Calendar connection found. User must connect Google Calendar first."
       });
     }
@@ -212,39 +197,40 @@ export const createEvent = async (req, res) => {
 
     if (isExpired) {
       console.log("🔄 Access token expired, refreshing...");
+
       const refreshRes = await axios.post(
         "https://oauth2.googleapis.com/token",
         new URLSearchParams({
-          client_id:     GOOGLE_CLIENT_ID,
+          client_id: GOOGLE_CLIENT_ID,
           client_secret: GOOGLE_CLIENT_SECRET,
           refresh_token: refreshToken,
-          grant_type:    "refresh_token"
+          grant_type: "refresh_token"
         })
       );
 
       currentAccessToken = refreshRes.data.access_token;
+
       const newExpiry = new Date(
         Date.now() + refreshRes.data.expires_in * 1000
       ).toISOString();
 
-      // Save refreshed tokens back to Method (necessary for future calls)
+      // Save refreshed tokens
       await saveTokensToMethod(methodApiKey, userRecordId, {
-        access_token:  currentAccessToken,
         refresh_token: refreshToken,
-        expires_in:    refreshRes.data.expires_in,
-        code:          null
+        access_token: currentAccessToken,
+        expires_in: refreshRes.data.expires_in
       });
 
       console.log("✅ Access token refreshed.");
     }
 
-    // Create Google Calendar event with Meet link
+    // Create Google Calendar event
     const eventRes = await axios.post(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
       {
         summary,
-        start:     { dateTime: start },
-        end:       { dateTime: end },
+        start: { dateTime: start },
+        end: { dateTime: end },
         attendees: attendees ?? [],
         conferenceData: {
           createRequest: { requestId: "meet-" + Date.now() }
@@ -256,25 +242,21 @@ export const createEvent = async (req, res) => {
     );
 
     const event = eventRes.data;
-    const meetLink  = event.conferenceData?.entryPoints?.[0]?.uri ?? null;
-    const htmlLink  = event.htmlLink ?? null;
-    const eventId   = event.id ?? null;
-    const startTime = event.start?.dateTime ?? null;
-    const endTime   = event.end?.dateTime ?? null;
+
+    const meetLink = event.conferenceData?.entryPoints?.[0]?.uri ?? null;
 
     console.log("✅ Event created:", meetLink);
 
-    // Return everything — Method handles field updates, emails, etc.
     res.status(200).json({
-      success:   true,
-      status:    "ok",
-      message:   "Meeting created successfully.",
+      success: true,
+      status: "ok",
+      message: "Meeting created successfully.",
       meetLink,
-      htmlLink,
-      eventId,
-      summary:   event.summary,
-      startTime,
-      endTime,
+      htmlLink: event.htmlLink ?? null,
+      eventId: event.id ?? null,
+      summary: event.summary,
+      startTime: event.start?.dateTime ?? null,
+      endTime: event.end?.dateTime ?? null,
       attendees: event.attendees ?? []
     });
 
@@ -282,9 +264,9 @@ export const createEvent = async (req, res) => {
     console.error("❌ createEvent error:", err.response?.data || err.message);
     res.status(500).json({
       success: false,
-      status:  "error",
+      status: "error",
       message: "Failed to create event.",
-      detail:  err.response?.data || err.message
+      detail: err.response?.data || err.message
     });
   }
 };
