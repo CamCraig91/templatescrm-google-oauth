@@ -6,20 +6,20 @@ import { saveTokensToMethod, getTokensFromMethod } from "./db.js";
 // PART 1 — USER AUTHENTICATION
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ─── 1a. Generate Auth URL ────────────────────────────────────────────────────
+// ─── 1a. Generate Auth URL (POST) ─────────────────────────────────────────────
 
-export const initiateAuth = (req, res) => {
-  const { accountName, userRecordId, methodApiKey } = req.body;
-
-  if (!accountName || !userRecordId || !methodApiKey) {
-    return res.status(400).json({
-      success: false,
-      status: "error",
-      message: "Missing required fields: accountName, userRecordId, or methodApiKey."
-    });
-  }
-
+export const initiateAuth = async (req, res) => {
   try {
+    const { accountName, userRecordId, methodApiKey } = req.body || {};
+
+    if (!accountName || !userRecordId || !methodApiKey) {
+      return res.status(400).json({
+        success: false,
+        status: "error",
+        message: "Missing required fields: accountName, userRecordId, or methodApiKey."
+      });
+    }
+
     const state = Buffer.from(
       JSON.stringify({ accountName, userRecordId, methodApiKey })
     ).toString("base64");
@@ -38,16 +38,15 @@ export const initiateAuth = (req, res) => {
 
     console.log(`🔗 Auth URL generated for accountName: ${accountName}, user: ${userRecordId}`);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       status: "ok",
-      message: "Authorization URL generated successfully.",
       authUrl
     });
 
   } catch (err) {
-    console.error("❌ initiateAuth error:", err.message);
-    res.status(500).json({
+    console.error("❌ initiateAuth error:", err);
+    return res.status(500).json({
       success: false,
       status: "error",
       message: "Server error generating authorization URL."
@@ -55,10 +54,10 @@ export const initiateAuth = (req, res) => {
   }
 };
 
-// ─── 1b. Local Testing Only ───────────────────────────────────────────────────
+// ─── 1b. Local Testing Only (GET) ─────────────────────────────────────────────
 
 export const startAuth = (req, res) => {
-  const { accountName, userRecordId, methodApiKey } = req.query;
+  const { accountName, userRecordId, methodApiKey } = req.query || {};
 
   if (!accountName || !userRecordId || !methodApiKey) {
     return res.status(400).send("Missing required params: accountName, userRecordId, methodApiKey");
@@ -81,14 +80,12 @@ export const startAuth = (req, res) => {
     });
 
   console.log(`🔗 Local test OAuth start — accountName: ${accountName}, user: ${userRecordId}`);
-  res.redirect(url);
+  return res.redirect(url);
 };
 
-// ─── 1c. Google Callback — Save Tokens to Method ──────────────────────────────
+// ─── 1c. Google Callback — Save Tokens to Method (GET) ────────────────────────
 
 export const handleCallback = async (req, res) => {
-
-  // Debug environment variables
   console.log("ENV DEBUG:", {
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
@@ -96,7 +93,7 @@ export const handleCallback = async (req, res) => {
   });
 
   try {
-    const { code, state, error } = req.query;
+    const { code, state, error } = req.query || {};
 
     if (error) {
       console.error("OAuth cancelled or error from Google:", error);
@@ -110,9 +107,14 @@ export const handleCallback = async (req, res) => {
 
     if (!state) return res.status(400).send("Missing state parameter.");
 
-    const { accountName, userRecordId, methodApiKey } = JSON.parse(
-      Buffer.from(state, "base64").toString()
-    );
+    let parsedState;
+    try {
+      parsedState = JSON.parse(Buffer.from(state, "base64").toString());
+    } catch (e) {
+      return res.status(400).send("Invalid state parameter.");
+    }
+
+    const { accountName, userRecordId, methodApiKey } = parsedState;
 
     console.log(`📥 Callback received — accountName: ${accountName}, user: ${userRecordId}`);
 
@@ -137,7 +139,7 @@ export const handleCallback = async (req, res) => {
       expires_in: tokens.expires_in
     });
 
-    res.send(`
+    return res.send(`
       <html><body style="font-family:sans-serif;text-align:center;padding:60px">
         <h2>✅ Google Calendar Connected!</h2>
         <p>Your Google Calendar has been linked successfully.</p>
@@ -147,7 +149,7 @@ export const handleCallback = async (req, res) => {
 
   } catch (err) {
     console.error("❌ handleCallback error:", err.response?.data || err.message);
-    res.status(500).send(`
+    return res.status(500).send(`
       <html><body style="font-family:sans-serif;text-align:center;padding:60px">
         <h2>❌ Connection Failed</h2>
         <p>Something went wrong. Please try again or contact support.</p>
@@ -174,7 +176,7 @@ export const createEvent = async (req, res) => {
       attendees,
       reminders,
       conferenceData
-    } = req.body;
+    } = req.body || {};
 
     if (!methodApiKey || !userRecordId) {
       return res.status(400).json({
@@ -263,10 +265,9 @@ export const createEvent = async (req, res) => {
 
     console.log("✅ Event created:", meetLink);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       status: "ok",
-      message: "Meeting created successfully.",
       meetLink,
       htmlLink: event.htmlLink ?? null,
       eventId: event.id ?? null,
@@ -278,7 +279,7 @@ export const createEvent = async (req, res) => {
 
   } catch (err) {
     console.error("❌ createEvent error:", err.response?.data || err.message);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       status: "error",
       message: "Failed to create event.",
