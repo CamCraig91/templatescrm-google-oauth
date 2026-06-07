@@ -86,7 +86,11 @@ export const startAuth = (req, res) => {
 
 // ─── 1c. Google Callback — Save Tokens to Method ──────────────────────────────
 
-export const handleCallback = async (req, res) => {
+export const handleCallback = async (req, res) => { console.log("ENV DEBUG:", {
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
+  REDIRECT_URI
+});
   try {
     const { code, state, error } = req.query;
 
@@ -99,11 +103,7 @@ export const handleCallback = async (req, res) => {
         </body></html>
       `);
     }
-console.log("ENV DEBUG:", {
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
-  REDIRECT_URI
-});
+
 
     if (!state) return res.status(400).send("Missing state parameter.");
 
