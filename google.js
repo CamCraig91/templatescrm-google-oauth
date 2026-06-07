@@ -86,6 +86,8 @@ export const startAuth = (req, res) => {
 // ─── 1c. Google Callback — Save Tokens to Method (GET) ────────────────────────
 
 export const handleCallback = async (req, res) => {
+
+  // Debug environment variables
   console.log("ENV DEBUG:", {
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
@@ -93,7 +95,7 @@ export const handleCallback = async (req, res) => {
   });
 
   try {
-    const { code, state, error } = req.query || {};
+    const { code, state, error } = req.query;
 
     if (error) {
       console.error("OAuth cancelled or error from Google:", error);
@@ -107,16 +109,20 @@ export const handleCallback = async (req, res) => {
 
     if (!state) return res.status(400).send("Missing state parameter.");
 
-    let parsedState;
-    try {
-      parsedState = JSON.parse(Buffer.from(state, "base64").toString());
-    } catch (e) {
-      return res.status(400).send("Invalid state parameter.");
-    }
-
-    const { accountName, userRecordId, methodApiKey } = parsedState;
+    const { accountName, userRecordId, methodApiKey } = JSON.parse(
+      Buffer.from(state, "base64").toString()
+    );
 
     console.log(`📥 Callback received — accountName: ${accountName}, user: ${userRecordId}`);
+
+    // ⭐ ADD THIS DEBUG BLOCK RIGHT HERE ⭐
+    console.log("TOKEN EXCHANGE DEBUG:", {
+      code,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
+      redirect_uri: REDIRECT_URI
+    });
+    // ⭐ END DEBUG BLOCK ⭐
 
     const tokenRes = await axios.post(
       "https://oauth2.googleapis.com/token",
@@ -128,6 +134,7 @@ export const handleCallback = async (req, res) => {
         grant_type: "authorization_code"
       })
     );
+
 
     const tokens = tokenRes.data;
 
