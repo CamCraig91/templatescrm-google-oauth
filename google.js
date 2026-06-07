@@ -99,6 +99,11 @@ export const handleCallback = async (req, res) => {
         </body></html>
       `);
     }
+console.log("ENV DEBUG:", {
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
+  REDIRECT_URI
+});
 
     if (!state) return res.status(400).send("Missing state parameter.");
 
