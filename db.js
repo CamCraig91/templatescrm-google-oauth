@@ -3,9 +3,7 @@ import axios from "axios";
 const METHOD_BASE = "https://rest.method.me";
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SAVE TOKENS TO METHOD (Corrected for Google OAuth)
-// Stores ONLY the fields Google actually uses.
-// No Base64. No authorization code. No refresh-token expiry.
+// SAVE TOKENS TO METHOD — FINAL VERSION
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const saveTokensToMethod = async (methodApiKey, userRecordId, tokens) => {
@@ -14,17 +12,27 @@ export const saveTokensToMethod = async (methodApiKey, userRecordId, tokens) => 
       ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
       : null;
 
+    const payload = {
+      MeetingAPIAccessToken:                   tokens.access_token || "",
+      MeetingLinkAPIRefreshToken:              tokens.refresh_token || "",
+      MeetingLinkAPIAccessTokenExpiryDateTime: expiryDate || "",
+      // Optional — Google does NOT provide refresh token expiry
+      MeetingLinkAPIRefreshTokenExpiryDateTime: ""
+    };
+
+    console.log("📤 Saving tokens to Method:", {
+      userRecordId,
+      access: tokens.access_token?.slice(0, 6) + "...",
+      refresh: tokens.refresh_token?.slice(0, 6) + "...",
+      expiryDate
+    });
+
     await axios.patch(
       `${METHOD_BASE}/api/v1/tables/Users/${userRecordId}`,
-      {
-        // ✔ Correct fields
-        MeetingAPIAccessToken:                   tokens.access_token || "",
-        MeetingLinkAPIRefreshToken:              tokens.refresh_token || "",
-        MeetingLinkAPIAccessTokenExpiryDateTime: expiryDate || ""
-      },
+      payload,
       {
         headers: {
-          Authorization:  `Bearer ${methodApiKey}`,
+          Authorization: `Bearer ${methodApiKey}`,
           "Content-Type": "application/json"
         }
       }
@@ -39,8 +47,7 @@ export const saveTokensToMethod = async (methodApiKey, userRecordId, tokens) => 
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// GET TOKENS FROM METHOD
-// Reads ONLY the fields we actually use for Google OAuth.
+// GET TOKENS FROM METHOD — FINAL VERSION
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const getTokensFromMethod = async (methodApiKey, userRecordId) => {
