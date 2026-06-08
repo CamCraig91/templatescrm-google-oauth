@@ -1,5 +1,9 @@
 import { createEvent } from "../google.js";
 
+export const config = {
+  runtime: "nodejs"
+};
+
 export default function handler(req, res) {
   if (req.method === "POST") {
     return createEvent(req, res);
