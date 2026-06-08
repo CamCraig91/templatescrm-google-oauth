@@ -3,61 +3,7 @@ import axios from "axios";
 const METHOD_BASE = "https://rest.method.me";
 
 // ═════════════════════════════════════════════════════════════════════════════
-// FIND OR CREATE TOKEN RECORD
-// ═════════════════════════════════════════════════════════════════════════════
-
-export const findOrCreateTokenRecord = async (methodApiKey, userRecordId) => {
-  try {
-    // 1️⃣ Search for existing record using linked field syntax
-    const searchRes = await axios.post(
-      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/query`,
-      {
-        Query: {
-          Criteria: [
-            {
-              Field: "CustomUser.RecordID",
-              Operator: "Equals",
-              Value: userRecordId
-            },
-            {
-              Field: "Provider",
-              Operator: "Equals",
-              Value: "Google"
-            }
-          ]
-        }
-      },
-      {
-        headers: { Authorization: `Bearer ${methodApiKey}` }
-      }
-    );
-
-    if (searchRes.data.length > 0) {
-      return searchRes.data[0].RecordID;
-    }
-
-    // 2️⃣ Create new record
-    const createRes = await axios.post(
-      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens`,
-      {
-        CustomUser: { RecordID: userRecordId },
-        Provider: "Google"
-      },
-      {
-        headers: { Authorization: `Bearer ${methodApiKey}` }
-      }
-    );
-
-    return createRes.data.RecordID;
-
-  } catch (err) {
-    console.error("❌ findOrCreateTokenRecord error:", err.response?.data || err.message);
-    throw err;
-  }
-};
-
-// ═════════════════════════════════════════════════════════════════════════════
-// SAVE TOKENS
+// SAVE TOKENS — updates the specific CustomOAuthTokens record
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const saveTokensToMethod = async (methodApiKey, tokenRecordId, tokens) => {
@@ -94,45 +40,22 @@ export const saveTokensToMethod = async (methodApiKey, tokenRecordId, tokens) =>
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// GET TOKENS
+// GET TOKENS — loads tokens from the specific CustomOAuthTokens record
 // ═════════════════════════════════════════════════════════════════════════════
 
-export const getTokensFromMethod = async (methodApiKey, userRecordId) => {
+export const getTokensFromMethod = async (methodApiKey, tokenRecordId) => {
   try {
-    const searchRes = await axios.post(
-      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/query`,
-      {
-        Query: {
-          Criteria: [
-            {
-              Field: "CustomUser.RecordID",
-              Operator: "Equals",
-              Value: userRecordId
-            },
-            {
-              Field: "Provider",
-              Operator: "Equals",
-              Value: "Google"
-            }
-          ]
-        }
-      },
+    const res = await axios.get(
+      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/${tokenRecordId}`,
       {
         headers: { Authorization: `Bearer ${methodApiKey}` }
       }
     );
 
-    if (searchRes.data.length === 0) {
-      return { accessToken: null, refreshToken: null, expiry: null, tokenRecordId: null };
-    }
-
-    const record = searchRes.data[0];
-
     return {
-      accessToken: record.AccessToken || null,
-      refreshToken: record.RefreshToken || null,
-      expiry: record.AccessTokenExpiry || null,
-      tokenRecordId: record.RecordID
+      accessToken: res.data.AccessToken || null,
+      refreshToken: res.data.RefreshToken || null,
+      expiry: res.data.AccessTokenExpiry || null
     };
 
   } catch (err) {
