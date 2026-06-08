@@ -3,32 +3,67 @@ import axios from "axios";
 const METHOD_BASE = "https://rest.method.me";
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SAVE TOKENS TO METHOD — FINAL VERSION
+// FIND OR CREATE TOKEN RECORD
 // ═════════════════════════════════════════════════════════════════════════════
 
-export const saveTokensToMethod = async (methodApiKey, userRecordId, tokens) => {
+export const findOrCreateTokenRecord = async (methodApiKey, userRecordId) => {
+  try {
+    // 1️⃣ Search for existing record
+    const searchRes = await axios.post(
+      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/search`,
+      {
+        UserRecordID: userRecordId,
+        Provider: "Google"
+      },
+      {
+        headers: { Authorization: `Bearer ${methodApiKey}` }
+      }
+    );
+
+    if (searchRes.data.length > 0) {
+      return searchRes.data[0].RecordID;
+    }
+
+    // 2️⃣ Create new record
+    const createRes = await axios.post(
+      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens`,
+      {
+        UserRecordID: userRecordId,
+        Provider: "Google"
+      },
+      {
+        headers: { Authorization: `Bearer ${methodApiKey}` }
+      }
+    );
+
+    return createRes.data.RecordID;
+
+  } catch (err) {
+    console.error("❌ findOrCreateTokenRecord error:", err.response?.data || err.message);
+    throw err;
+  }
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SAVE TOKENS
+// ═════════════════════════════════════════════════════════════════════════════
+
+export const saveTokensToMethod = async (methodApiKey, tokenRecordId, tokens) => {
   try {
     const expiryDate = tokens.expires_in
       ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
       : null;
 
     const payload = {
-      MeetingAPIAccessToken:                   tokens.access_token || "",
-      MeetingLinkAPIRefreshToken:              tokens.refresh_token || "",
-      MeetingLinkAPIAccessTokenExpiryDateTime: expiryDate || "",
-      // Optional — Google does NOT provide refresh token expiry
-      MeetingLinkAPIRefreshTokenExpiryDateTime: ""
+      AccessToken: tokens.access_token || "",
+      RefreshToken: tokens.refresh_token || "",
+      AccessTokenExpiry: expiryDate || "",
+      RefreshTokenExpiry: "",
+      LastUpdated: new Date().toISOString()
     };
 
-    console.log("📤 Saving tokens to Method:", {
-      userRecordId,
-      access: tokens.access_token?.slice(0, 6) + "...",
-      refresh: tokens.refresh_token?.slice(0, 6) + "...",
-      expiryDate
-    });
-
     await axios.patch(
-      `${METHOD_BASE}/api/v1/tables/Users/${userRecordId}`,
+      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/${tokenRecordId}`,
       payload,
       {
         headers: {
@@ -38,7 +73,7 @@ export const saveTokensToMethod = async (methodApiKey, userRecordId, tokens) => 
       }
     );
 
-    console.log(`✅ Tokens saved to Method for user record ${userRecordId}`);
+    console.log(`✅ Tokens saved to CustomOAuthTokens record ${tokenRecordId}`);
 
   } catch (err) {
     console.error("❌ saveTokensToMethod error:", err.response?.data || err.message);
@@ -47,22 +82,33 @@ export const saveTokensToMethod = async (methodApiKey, userRecordId, tokens) => 
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// GET TOKENS FROM METHOD — FINAL VERSION
+// GET TOKENS
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const getTokensFromMethod = async (methodApiKey, userRecordId) => {
   try {
-    const res = await axios.get(
-      `${METHOD_BASE}/api/v1/tables/Users/${userRecordId}`,
+    const searchRes = await axios.post(
+      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/search`,
+      {
+        UserRecordID: userRecordId,
+        Provider: "Google"
+      },
       {
         headers: { Authorization: `Bearer ${methodApiKey}` }
       }
     );
 
+    if (searchRes.data.length === 0) {
+      return { accessToken: null, refreshToken: null, expiry: null, tokenRecordId: null };
+    }
+
+    const record = searchRes.data[0];
+
     return {
-      accessToken:  res.data.MeetingAPIAccessToken || null,
-      refreshToken: res.data.MeetingLinkAPIRefreshToken || null,
-      expiry:       res.data.MeetingLinkAPIAccessTokenExpiryDateTime || null
+      accessToken: record.AccessToken || null,
+      refreshToken: record.RefreshToken || null,
+      expiry: record.AccessTokenExpiry || null,
+      tokenRecordId: record.RecordID
     };
 
   } catch (err) {
