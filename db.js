@@ -25,7 +25,7 @@ export const saveTokensToMethod = async (methodApiKey, tokenRecordId, tokens) =>
       payload,
       {
         headers: {
-          Authorization: `Bearer ${methodApiKey}`,
+          Authorization: `APIKey ${methodApiKey}`,
           "Content-Type": "application/json"
         }
       }
@@ -48,7 +48,7 @@ export const getTokensFromMethod = async (methodApiKey, tokenRecordId) => {
     const res = await axios.get(
       `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/${tokenRecordId}`,
       {
-        headers: { Authorization: `Bearer ${methodApiKey}` }
+        headers: { Authorization: `APIKey ${methodApiKey}` }
       }
     );
 
