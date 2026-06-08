@@ -8,12 +8,24 @@ const METHOD_BASE = "https://rest.method.me";
 
 export const findOrCreateTokenRecord = async (methodApiKey, userRecordId) => {
   try {
-    // 1️⃣ Search for existing record
+    // 1️⃣ Search for existing record using linked field syntax
     const searchRes = await axios.post(
-      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/search`,
+      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/query`,
       {
-        UserRecordID: userRecordId,
-        Provider: "Google"
+        Query: {
+          Criteria: [
+            {
+              Field: "CustomUser.RecordID",
+              Operator: "Equals",
+              Value: userRecordId
+            },
+            {
+              Field: "Provider",
+              Operator: "Equals",
+              Value: "Google"
+            }
+          ]
+        }
       },
       {
         headers: { Authorization: `Bearer ${methodApiKey}` }
@@ -28,7 +40,7 @@ export const findOrCreateTokenRecord = async (methodApiKey, userRecordId) => {
     const createRes = await axios.post(
       `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens`,
       {
-        UserRecordID: userRecordId,
+        CustomUser: { RecordID: userRecordId },
         Provider: "Google"
       },
       {
@@ -59,7 +71,7 @@ export const saveTokensToMethod = async (methodApiKey, tokenRecordId, tokens) =>
       RefreshToken: tokens.refresh_token || "",
       AccessTokenExpiry: expiryDate || "",
       RefreshTokenExpiry: "",
-      LastUpdated: new Date().toISOString()
+      LastModifiedDate: new Date().toISOString()
     };
 
     await axios.patch(
@@ -88,10 +100,22 @@ export const saveTokensToMethod = async (methodApiKey, tokenRecordId, tokens) =>
 export const getTokensFromMethod = async (methodApiKey, userRecordId) => {
   try {
     const searchRes = await axios.post(
-      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/search`,
+      `${METHOD_BASE}/api/v1/tables/CustomOAuthTokens/query`,
       {
-        UserRecordID: userRecordId,
-        Provider: "Google"
+        Query: {
+          Criteria: [
+            {
+              Field: "CustomUser.RecordID",
+              Operator: "Equals",
+              Value: userRecordId
+            },
+            {
+              Field: "Provider",
+              Operator: "Equals",
+              Value: "Google"
+            }
+          ]
+        }
       },
       {
         headers: { Authorization: `Bearer ${methodApiKey}` }
