@@ -1,10 +1,6 @@
 import axios from "axios";
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI } from "./config.js";
-import { 
-  saveTokensToMethod, 
-  getTokensFromMethod, 
-  findOrCreateTokenRecord 
-} from "./db.js";
+import { saveTokensToMethod, getTokensFromMethod } from "./db.js";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PART 1 — USER AUTHENTICATION
@@ -12,18 +8,18 @@ import {
 
 export const initiateAuth = async (req, res) => {
   try {
-    const { accountName, userRecordId, methodApiKey } = req.body || {};
+    const { accountName, userRecordId, methodApiKey, tokenRecordId } = req.body || {};
 
-    if (!accountName || !userRecordId || !methodApiKey) {
+    if (!accountName || !userRecordId || !methodApiKey || !tokenRecordId) {
       return res.status(400).json({
         success: false,
         status: "error",
-        message: "Missing required fields: accountName, userRecordId, or methodApiKey."
+        message: "Missing required fields: accountName, userRecordId, methodApiKey, tokenRecordId."
       });
     }
 
     const state = Buffer.from(
-      JSON.stringify({ accountName, userRecordId, methodApiKey })
+      JSON.stringify({ accountName, userRecordId, methodApiKey, tokenRecordId })
     ).toString("base64");
 
     const authUrl =
@@ -37,8 +33,6 @@ export const initiateAuth = async (req, res) => {
         prompt: "consent select_account",
         state
       });
-
-    console.log(`🔗 Auth URL generated for accountName: ${accountName}, user: ${userRecordId}`);
 
     return res.status(200).json({
       success: true,
@@ -56,72 +50,26 @@ export const initiateAuth = async (req, res) => {
   }
 };
 
-// ─── 1b. Local Testing Only (GET) ─────────────────────────────────────────────
-
-export const startAuth = (req, res) => {
-  const { accountName, userRecordId, methodApiKey } = req.query || {};
-
-  if (!accountName || !userRecordId || !methodApiKey) {
-    return res.status(400).send("Missing required params: accountName, userRecordId, methodApiKey");
-  }
-
-  const state = Buffer.from(
-    JSON.stringify({ accountName, userRecordId, methodApiKey })
-  ).toString("base64");
-
-  const url =
-    "https://accounts.google.com/o/oauth2/v2/auth?" +
-    new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      response_type: "code",
-      scope: "https://www.googleapis.com/auth/calendar.events",
-      access_type: "offline",
-      prompt: "consent select_account",
-      state
-    });
-
-  console.log(`🔗 Local test OAuth start — accountName: ${accountName}, user: ${userRecordId}`);
-  return res.redirect(url);
-};
-
 // ─── 1c. Google Callback — Save Tokens to Method (GET) ────────────────────────
 
 export const handleCallback = async (req, res) => {
-
-  console.log("ENV DEBUG:", {
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
-    REDIRECT_URI
-  });
-
   try {
     const { code, state, error } = req.query;
 
     if (error) {
-      console.error("OAuth cancelled or error from Google:", error);
       return res.send(`
         <html><body style="font-family:sans-serif;text-align:center;padding:60px">
           <h2>❌ Connection Cancelled</h2>
-          <p>You cancelled the Google authorization. You can close this window.</p>
+          <p>You cancelled the Google authorization.</p>
         </body></html>
       `);
     }
 
     if (!state) return res.status(400).send("Missing state parameter.");
 
-    const { accountName, userRecordId, methodApiKey } = JSON.parse(
+    const { accountName, userRecordId, methodApiKey, tokenRecordId } = JSON.parse(
       Buffer.from(state, "base64").toString()
     );
-
-    console.log(`📥 Callback received — accountName: ${accountName}, user: ${userRecordId}`);
-
-    console.log("TOKEN EXCHANGE DEBUG:", {
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
-      redirect_uri: REDIRECT_URI
-    });
 
     const tokenRes = await axios.post(
       "https://oauth2.googleapis.com/token",
@@ -136,12 +84,7 @@ export const handleCallback = async (req, res) => {
 
     const tokens = tokenRes.data;
 
-    console.log("✅ Tokens received. Has refresh token:", !!tokens.refresh_token);
-
-    // 🔹 NEW: find or create CustomOAuthTokens record
-    const tokenRecordId = await findOrCreateTokenRecord(methodApiKey, userRecordId);
-
-    // 🔹 Save tokens into CustomOAuthTokens
+    // 🔥 Save tokens directly to the known record
     await saveTokensToMethod(methodApiKey, tokenRecordId, {
       refresh_token: tokens.refresh_token,
       access_token: tokens.access_token,
@@ -151,8 +94,7 @@ export const handleCallback = async (req, res) => {
     return res.send(`
       <html><body style="font-family:sans-serif;text-align:center;padding:60px">
         <h2>✅ Google Calendar Connected!</h2>
-        <p>Your Google Calendar has been linked successfully.</p>
-        <p>You can close this window and return to Method.</p>
+        <p>You can close this window.</p>
       </body></html>
     `);
 
@@ -161,8 +103,7 @@ export const handleCallback = async (req, res) => {
     return res.status(500).send(`
       <html><body style="font-family:sans-serif;text-align:center;padding:60px">
         <h2>❌ Connection Failed</h2>
-        <p>Something went wrong. Please try again or contact support.</p>
-        <small>${err.message}</small>
+        <p>${err.message}</p>
       </body></html>
     `);
   }
@@ -177,6 +118,7 @@ export const createEvent = async (req, res) => {
     const {
       methodApiKey,
       userRecordId,
+      tokenRecordId,
       summary,
       location,
       description,
@@ -187,35 +129,24 @@ export const createEvent = async (req, res) => {
       conferenceData
     } = req.body || {};
 
-    if (!methodApiKey || !userRecordId) {
+    if (!methodApiKey || !userRecordId || !tokenRecordId) {
       return res.status(400).json({
         success: false,
         status: "error",
-        message: "Missing required fields: methodApiKey or userRecordId."
+        message: "Missing required fields: methodApiKey, userRecordId, tokenRecordId."
       });
     }
 
-    if (!summary || !start || !end) {
-      return res.status(400).json({
-        success: false,
-        status: "error",
-        message: "Missing required fields: summary, start, or end."
-      });
-    }
-
-    // 🔹 NEW: get tokens + tokenRecordId from CustomOAuthTokens
-    const {
-      accessToken,
-      refreshToken,
-      expiry,
+    const { accessToken, refreshToken, expiry } = await getTokensFromMethod(
+      methodApiKey,
       tokenRecordId
-    } = await getTokensFromMethod(methodApiKey, userRecordId);
+    );
 
     if (!refreshToken) {
       return res.status(400).json({
         success: false,
         status: "error",
-        message: "No Google Calendar connection found. User must connect Google Calendar first."
+        message: "No Google Calendar connection found."
       });
     }
 
@@ -223,8 +154,6 @@ export const createEvent = async (req, res) => {
     const isExpired = !expiry || new Date(expiry) <= new Date();
 
     if (isExpired) {
-      console.log("🔄 Access token expired, refreshing...");
-
       const refreshRes = await axios.post(
         "https://oauth2.googleapis.com/token",
         new URLSearchParams({
@@ -242,8 +171,6 @@ export const createEvent = async (req, res) => {
         access_token: currentAccessToken,
         expires_in: refreshRes.data.expires_in
       });
-
-      console.log("✅ Access token refreshed.");
     }
 
     const eventBody = {
@@ -269,20 +196,12 @@ export const createEvent = async (req, res) => {
 
     const event = eventRes.data;
 
-    const meetLink = event.conferenceData?.entryPoints?.[0]?.uri ?? null;
-
-    console.log("✅ Event created:", meetLink);
-
     return res.status(200).json({
       success: true,
       status: "ok",
-      meetLink,
+      meetLink: event.conferenceData?.entryPoints?.[0]?.uri ?? null,
       htmlLink: event.htmlLink ?? null,
-      eventId: event.id ?? null,
-      summary: event.summary,
-      startTime: event.start?.dateTime ?? null,
-      endTime: event.end?.dateTime ?? null,
-      attendees: event.attendees ?? []
+      eventId: event.id ?? null
     });
 
   } catch (err) {
