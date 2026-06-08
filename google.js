@@ -1,6 +1,6 @@
 import axios from "axios";
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI } from "./config.js";
-import { saveTokensToMethod, getTokensFromMethod } from "./db.js";
+import { saveTokensToMethod, getTokensFromMethod, findOrCreateTokenRecord } from "./db.js";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PART 1 — USER AUTHENTICATION
@@ -115,14 +115,12 @@ export const handleCallback = async (req, res) => {
 
     console.log(`📥 Callback received — accountName: ${accountName}, user: ${userRecordId}`);
 
-    // ⭐ ADD THIS DEBUG BLOCK RIGHT HERE ⭐
     console.log("TOKEN EXCHANGE DEBUG:", {
       code,
       client_id: GOOGLE_CLIENT_ID,
       client_secret: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
       redirect_uri: REDIRECT_URI
     });
-    // ⭐ END DEBUG BLOCK ⭐
 
     const tokenRes = await axios.post(
       "https://oauth2.googleapis.com/token",
@@ -135,12 +133,15 @@ export const handleCallback = async (req, res) => {
       })
     );
 
-
     const tokens = tokenRes.data;
 
     console.log("✅ Tokens received. Has refresh token:", !!tokens.refresh_token);
 
-    await saveTokensToMethod(methodApiKey, userRecordId, {
+    // 🔹 NEW: find or create CustomOAuthTokens record for this user
+    const tokenRecordId = await findOrCreateTokenRecord(methodApiKey, userRecordId);
+
+    // 🔹 Save tokens into CustomOAuthTokens
+    await saveTokensToMethod(methodApiKey, tokenRecordId, {
       refresh_token: tokens.refresh_token,
       access_token: tokens.access_token,
       expires_in: tokens.expires_in
@@ -167,7 +168,7 @@ export const handleCallback = async (req, res) => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PART 2 — MEETING CREATION
+– PART 2 — MEETING CREATION
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const createEvent = async (req, res) => {
@@ -201,10 +202,13 @@ export const createEvent = async (req, res) => {
       });
     }
 
-    const { accessToken, refreshToken, expiry } = await getTokensFromMethod(
-      methodApiKey,
-      userRecordId
-    );
+    // 🔹 NEW: get tokens + tokenRecordId from CustomOAuthTokens
+    const {
+      accessToken,
+      refreshToken,
+      expiry,
+      tokenRecordId
+    } = await getTokensFromMethod(methodApiKey, userRecordId);
 
     if (!refreshToken) {
       return res.status(400).json({
@@ -232,11 +236,7 @@ export const createEvent = async (req, res) => {
 
       currentAccessToken = refreshRes.data.access_token;
 
-      const newExpiry = new Date(
-        Date.now() + refreshRes.data.expires_in * 1000
-      ).toISOString();
-
-      await saveTokensToMethod(methodApiKey, userRecordId, {
+      await saveTokensToMethod(methodApiKey, tokenRecordId, {
         refresh_token: refreshToken,
         access_token: currentAccessToken,
         expires_in: refreshRes.data.expires_in
