@@ -1,12 +1,14 @@
 import axios from "axios";
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI } from "./config.js";
-import { saveTokensToMethod, getTokensFromMethod, findOrCreateTokenRecord } from "./db.js";
+import { 
+  saveTokensToMethod, 
+  getTokensFromMethod, 
+  findOrCreateTokenRecord 
+} from "./db.js";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PART 1 — USER AUTHENTICATION
 // ═════════════════════════════════════════════════════════════════════════════
-
-// ─── 1a. Generate Auth URL (POST) ─────────────────────────────────────────────
 
 export const initiateAuth = async (req, res) => {
   try {
@@ -87,7 +89,6 @@ export const startAuth = (req, res) => {
 
 export const handleCallback = async (req, res) => {
 
-  // Debug environment variables
   console.log("ENV DEBUG:", {
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: GOOGLE_CLIENT_SECRET?.slice(0, 4) + "...",
@@ -137,7 +138,7 @@ export const handleCallback = async (req, res) => {
 
     console.log("✅ Tokens received. Has refresh token:", !!tokens.refresh_token);
 
-    // 🔹 NEW: find or create CustomOAuthTokens record for this user
+    // 🔹 NEW: find or create CustomOAuthTokens record
     const tokenRecordId = await findOrCreateTokenRecord(methodApiKey, userRecordId);
 
     // 🔹 Save tokens into CustomOAuthTokens
@@ -168,7 +169,7 @@ export const handleCallback = async (req, res) => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-– PART 2 — MEETING CREATION
+// PART 2 — MEETING CREATION
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const createEvent = async (req, res) => {
