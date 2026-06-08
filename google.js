@@ -56,6 +56,18 @@ export const handleCallback = async (req, res) => {
   try {
     const { code, state, error } = req.query;
 
+if (!state) return res.status(400).send("Missing state parameter.");
+
+const { accountName, userRecordId, methodApiKey, tokenRecordId } = JSON.parse(
+  Buffer.from(state, "base64").toString()
+);
+
+// ⭐ NOW the values exist — log them here
+console.log("DEBUG methodApiKey:", methodApiKey);
+console.log("DEBUG tokenRecordId:", tokenRecordId);
+console.log("DEBUG userRecordId:", userRecordId);
+console.log("DEBUG accountName:", accountName);
+
     if (error) {
       return res.send(`
         <html><body style="font-family:sans-serif;text-align:center;padding:60px">
