@@ -22,7 +22,6 @@ app.get("/", (req, res) => {
 });
 
 app.post("/initiate-auth", initiateAuth);
-app.get("/oauth/start", startAuth);
 app.get("/oauth/callback", handleCallback);
 app.post("/create-event", createEvent);
 
