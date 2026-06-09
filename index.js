@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { initiateAuth, startAuth, handleCallback, createEvent } from "./google.js";
+import { initiateAuth, handleCallback, createEvent } from "./google.js";
 import { PORT } from "./config.js";
 
 const app = express();
