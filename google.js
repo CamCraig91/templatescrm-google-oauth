@@ -23,7 +23,7 @@ export const initiateAuth = async (req, res) => {
     ).toString("base64");
 
     const authUrl =
-      "https://accounts.google.com/o/oauth2/v2/auth?" +
+      "https://accounts..com/o/oauth2/v2/auth?" +
       new URLSearchParams({
         client_id: GOOGLE_CLIENT_ID,
         redirect_uri: REDIRECT_URI,
@@ -102,21 +102,29 @@ console.log("DEBUG accountName:", accountName);
       expires_in: tokens.expires_in
     });
 
-    return res.send(`
-      <html><body style="font-family:sans-serif;text-align:center;padding:60px">
-        <h2>✅ Google Calendar Connected!</h2>
-        <p>You can close this window.</p>
-      </body></html>
-    `);
+   return res.send(`
+  <html>
+    <body style="font-family:sans-serif;text-align:center;padding:60px">
+      <img src="/TemplatesLogo.png" alt="TemplatesCRM Logo" style="width:120px;margin-bottom:20px;" />
+      <h2>✅ Google Calendar Connected!</h2>
+      <p>You can close this window.</p>
+    </body>
+  </html>
+`);
+
 
   } catch (err) {
     console.error("❌ handleCallback error:", err.response?.data || err.message);
     return res.status(500).send(`
-      <html><body style="font-family:sans-serif;text-align:center;padding:60px">
-        <h2>❌ Connection Failed</h2>
-        <p>${err.message}</p>
-      </body></html>
-    `);
+  <html>
+    <body style="font-family:sans-serif;text-align:center;padding:60px">
+      <img src="/TemplatesLogo.png" alt="TemplatesCRM Logo" style="width:120px;margin-bottom:20px;" />
+      <h2>❌ Connection Failed</h2>
+      <p>${err.message}</p>
+    </body>
+  </html>
+`);
+
   }
 };
 
