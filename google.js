@@ -23,16 +23,17 @@ export const initiateAuth = async (req, res) => {
     ).toString("base64");
 
     const authUrl =
-      "https://accounts..com/o/oauth2/v2/auth?" +
-      new URLSearchParams({
-        client_id: GOOGLE_CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
-        response_type: "code",
-        scope: "https://www.googleapis.com/auth/calendar.events",
-        access_type: "offline",
-        prompt: "consent select_account",
-        state
-      });
+  "https://accounts.google.com/o/oauth2/v2/auth?" +
+  new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: "code",
+    scope: "https://www.googleapis.com/auth/calendar.events",
+    access_type: "offline",
+    prompt: "consent select_account",
+    state
+  });
+
 
     return res.status(200).json({
       success: true,
